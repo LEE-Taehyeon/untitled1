@@ -1,8 +1,10 @@
 package Chap16
 
-class list {
+class list {}
 
-}
+// List(리스트) - 변경 불가능한 Seq
+// 특징 - 1) List는 앞부분에 빠르게 원소를 추가하거나 삭제할 수 있다.
+//       2) 그러나 순차적으로 따라가야만 하기 때문에 임의의 위치ㅣ에 접근할 때는 빠르지 않다.
 object list extends App{
   val fruit = List("apple", "orange", "pear", "watermelon")
   val nums = List(1,2,3,4,5,6,7,8,9)
