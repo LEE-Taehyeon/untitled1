@@ -1,32 +1,74 @@
 package Chap01.P52
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.dispatch.{Envelope, MailboxType, MessageQueue, ProducesMessageQueue}
-import sun.misc.ObjectInputFilter.Config
-
 import java.util.concurrent.ConcurrentLinkedQueue
+import akka.actor.{Props, Actor, ActorSystem, ActorRef}
+import akka.dispatch.{MailboxType, ProducesMessageQueue, Envelope, MessageQueue}
+import com.typesafe.config.Config
 
-class MyMessageQueue extends MessageQueue{
-  private final val queue = new ConcurrentLinkedQueue[Envelope]()
-  override def enqueue(receiver: ActorRef, handle: Envelope): Unit = {
-    if(handle.sender.path.name=="MyActor"){
-      handle.sender ! "Hey dude, How are you?, I know your name, processing your request"
-      queue.offer(handle)
-    }else handle.sender ! "I don't talk to strangers, I can't process your request"
+
+/**
+ * Created by user
+ */
+object CustomMailbox extends App  {
+  val actorSystem = ActorSystem("HelloAkka")
+  val actor = actorSystem.actorOf(Props[MySpecialActor].withDispatcher("custom-dispatcher"))
+  val actor1 = actorSystem.actorOf(Props[MyActor],"xyz")
+
+  val actor2 = actorSystem.actorOf(Props[MyActor],"MyActor")
+
+  actor1 !  ("hello", actor)
+  actor2 !  ("hello", actor)
+}
+
+class MySpecialActor extends Actor {
+  override def receive: Receive = {
+    case msg: String => println(s"msg is $msg" )
   }
-
-  override def dequeue(): Envelope = queue.poll()
-
-  override def numberOfMessages: Int = queue.size()
-
-  override def hasMessages: Boolean = !queue.isEmpty
-
-  override def cleanUp(owner: ActorRef, deadLetters: MessageQueue): Unit ={
-    while(hasMessages) deadLetters.enqueue(owner, dequeue())
+}
+class MyActor extends Actor {
+  override def receive: Receive = {
+    case (msg: String, actorRef: ActorRef) => actorRef ! msg
+    case msg => println(msg)
   }
 }
 
-class MyUnboundedMailBox extends MailboxType with ProducesMessageQueue[MyMessageQueue] {
-  def this(setting:ActorSystem.Settings, config: Config) = this()
-  final override def create(owner: Option[ActorRef], system: Option[ActorSystem]): MessageQueue = new MyMessageQueue()
+
+
+trait MyUnboundedMessageQueueSemantics
+
+// This is the MessageQueue implementation
+class MyMessageQueue extends MessageQueue {
+  private final val queue = new ConcurrentLinkedQueue[Envelope]()
+
+  // these should be implemented; queue used as example
+  def enqueue(receiver: ActorRef, handle: Envelope): Unit = {
+    if(handle.sender.path.name == "MyActor") {
+      handle.sender !  "Hey dude, How are you?, I Know your name,processing your request"
+      queue.offer(handle)
+    }
+    else handle.sender ! "I don't talk to strangers, I can't process your request"
+  }
+  def dequeue(): Envelope = queue.poll
+  def numberOfMessages: Int = queue.size
+  def hasMessages: Boolean = !queue.isEmpty
+  def cleanUp(owner: ActorRef, deadLetters: MessageQueue) {
+    while (hasMessages) {
+      deadLetters.enqueue(owner, dequeue())
+    }
+  }
+}
+
+class MyUnboundedMailbox extends MailboxType
+  with ProducesMessageQueue[MyMessageQueue] {
+
+  // This constructor signature must exist, it will be called by Akka
+  def this(settings: ActorSystem.Settings, config: Config) = {
+    // put your initialization code here
+    this()
+  }
+
+  // The create method is called to create the MessageQueue
+  final override def create(owner: Option[ActorRef],
+                            system: Option[ActorSystem]): MessageQueue =
+    new MyMessageQueue()
 }
